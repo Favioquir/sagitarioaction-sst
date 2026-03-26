@@ -1103,23 +1103,42 @@ async function loadDataFromSP(){
   toast('🔄 Cargando datos desde SharePoint via Power Automate...','inf');
   try{
     // Helper: SharePoint Choice columns come as {Value:"text"} or plain string
-    const choiceVal = (v) => (v && typeof v === 'object') ? (v.Value||'') : (v||'');
+    const choiceVal = (v) => {
+      if(v===null||v===undefined) return '';
+      if(typeof v === 'object') return v.Value||v.value||'';
+      return String(v);
+    };
 
     // Personal (incluye Pwd para login)
-    const personal = await spGetList('TS_Personal','ID,Title,Email,Cargo,Area,Rol,Avatar,Activo,Pwd','Activo eq 1');
+    const personal = await spGetList('TS_Personal','','');
+    console.log('📋 TS_Personal raw count:', personal?personal.length:'null');
     if(personal&&personal.length){
+      // Log first record to see field names
+      console.log('📋 TS_Personal sample fields:', JSON.stringify(Object.keys(personal[0])));
+      console.log('📋 TS_Personal sample record:', JSON.stringify(personal[0]));
       SP_PERSONAL.length=0;
-      personal.forEach((p,i)=> SP_PERSONAL.push({
-        id:p.ID||p.Id, nombre:p.Title.split(' ')[0], apellido:p.Title.split(' ').slice(1).join(' '),
-        email:p.Email||p.email||'', cargo:choiceVal(p.Cargo), area:choiceVal(p.Area), rol:choiceVal(p.Rol),
-        activo:true, avatar:p.Avatar||'👤', pwd:p.Pwd||''
-      }));
+      personal.forEach((p,i)=> {
+        const entry = {
+          id:p.ID||p.Id||p.id||i, 
+          nombre:p.Title?p.Title.split(' ')[0]:'', 
+          apellido:p.Title?p.Title.split(' ').slice(1).join(' '):'',
+          email:(p.Email||p.email||p.EMAIL||'').toLowerCase().trim(), 
+          cargo:choiceVal(p.Cargo||p.cargo), 
+          area:choiceVal(p.Area||p.area||p.x00c1_rea), 
+          rol:choiceVal(p.Rol||p.rol||p.ROL),
+          activo:p.Activo!==false&&p.Activo!==0&&p.Activo!=='No', 
+          avatar:p.Avatar||p.avatar||'👤', 
+          pwd:p.Pwd||p.pwd||p.PWD||''
+        };
+        if(i<3) console.log('👤 User:', entry.email, '| rol:', JSON.stringify(entry.rol), '| area:', entry.area, '| pwd:', entry.pwd?'***':'(empty)');
+        SP_PERSONAL.push(entry);
+      });
     }
     // Buses
-    const buses = await spGetList('TS_Buses','ID,Title,Marca,Modelo,Carroceria,Anio,Asientos,TipoUnidad,EmpresaTercera,Activo','Activo eq 1');
+    const buses = await spGetList('TS_Buses','','');
     if(buses&&buses.length){
       Object.keys(SP_BUSES).forEach(k=>delete SP_BUSES[k]);
-      buses.forEach(b=>{
+      buses.filter(b=>b.Activo!==false&&b.Activo!==0&&b.Activo!=='No').forEach(b=>{
         SP_BUSES[b.Title]={
           marca:b.Marca||'', modelo:b.Modelo||'', carroceria:b.Carroceria||'',
           asientos:b.Asientos||0, tipoUnidad:choiceVal(b.TipoUnidad)||'Bus',
@@ -1129,22 +1148,19 @@ async function loadDataFromSP(){
       });
     }
     // Conductores
-    const conds = await spGetList('TS_Conductores','ID,Title,DNI,LicenciaCategoria,FechaVencLic,Activo','Activo eq 1');
+    const conds = await spGetList('TS_Conductores','','');
     if(conds&&conds.length){
       SP_CONDUCTORES.length=0;
-      conds.forEach(c=> SP_CONDUCTORES.push({
+      conds.filter(c=>c.Activo!==false&&c.Activo!==0&&c.Activo!=='No').forEach(c=> SP_CONDUCTORES.push({
         id:c.ID||c.Id, nombre:c.Title, dni:c.DNI||'',
         licCateg:choiceVal(c.LicenciaCategoria), vencLic:c.FechaVencLic?c.FechaVencLic.split('T')[0]:'', activo:true
       }));
     }
     // Acciones (tareas) — Estado is Choice, filter with Value syntax
-    const acciones = await spGetList('TS_Acciones',
-      'ID,Title,Descripcion,Origen,Prioridad,Estado,EmailResponsable,NombreResponsable,FechaLimite,AccionCorrectiva,Referencia,EmailCreador,InspeccionId,FechaCierre,ComentarioCierre,ValidadoPor',
-      "Estado/Value ne 'Cerrado'"
-    );
+    const acciones = await spGetList('TS_Acciones','','');
     if(acciones&&acciones.length){
       ACCIONES.length=0; nextId=1;
-      acciones.forEach(a=>{
+      acciones.filter(a=>choiceVal(a.Estado)!=='Cerrado').forEach(a=>{
         ACCIONES.push({
           id:a.ID||a.Id, title:a.Title, origen:choiceVal(a.Origen), prior:choiceVal(a.Prioridad)||'Media',
           estado:choiceVal(a.Estado)||'Abierto', desc:a.Descripcion||'',
@@ -1588,12 +1604,36 @@ function doLogin(){
     avatar:p.avatar,
     spId:p.id,
   };
-  role=p.rol.toLowerCase().replace(' ','');
-  if(role==='supervisor')role='sup';
-  else if(role==='ssoma')role='ssoma';
-  else if(role==='responsable')role='resp';
-  else if(role==='sig')role='sig';
-  else if(role==='gerencia')role='ger';
+  console.log('🔑 Login attempt:', email);
+  console.log('🔑 Found user:', JSON.stringify({nombre:p.nombre, rol:p.rol, area:p.area, cargo:p.cargo, pwd:p.pwd?'***':'(empty)'}));
+  // Normalizar rol — acepta variaciones como "Coordinador SIG", "Sup. Operaciones", etc.
+  const rawRol = (p.rol||'').toLowerCase().replace(/[^a-záéíóúñ]/g,' ').trim();
+  console.log('🔑 rawRol:', JSON.stringify(rawRol));
+  if(rawRol.includes('sig') || rawRol.includes('admin')) role='sig';
+  else if(rawRol.includes('ssoma') || rawRol.includes('seguridad')) role='ssoma';
+  else if(rawRol.includes('superv')) role='sup';
+  else if(rawRol.includes('gerencia') || rawRol.includes('gerente') || rawRol.includes('director')) role='ger';
+  else if(rawRol.includes('responsable') || rawRol.includes('técnico') || rawRol.includes('tecnico') || rawRol.includes('jefe') || rawRol.includes('coordinador')) role='resp';
+  else role=rawRol.replace(/\s/g,'');
+  // Fallback exacto
+  if(role!=='sup'&&role!=='ssoma'&&role!=='resp'&&role!=='sig'&&role!=='ger'){
+    const exact = rawRol.replace(/\s/g,'');
+    if(exact==='supervisor')role='sup';
+    else if(exact==='ssoma')role='ssoma';
+    else if(exact==='responsable')role='resp';
+    else if(exact==='sig')role='sig';
+    else if(exact==='gerencia')role='ger';
+  }
+  // Fallback final: si rol está vacío, intentar detectar del cargo
+  if(!role || (role!=='sup'&&role!=='ssoma'&&role!=='resp'&&role!=='sig'&&role!=='ger')){
+    const rawCargo = (p.cargo||'').toLowerCase();
+    if(rawCargo.includes('sig') || rawCargo.includes('admin')) role='sig';
+    else if(rawCargo.includes('ssoma') || rawCargo.includes('seguridad')) role='ssoma';
+    else if(rawCargo.includes('superv')) role='sup';
+    else if(rawCargo.includes('gerencia') || rawCargo.includes('gerente')) role='ger';
+    console.log('🔑 Rol from cargo fallback:', role);
+  }
+  console.log('🔑 Final role:', role);
   buildHome();go('s-home');
 }
 
