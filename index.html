@@ -1062,9 +1062,13 @@ async function testMSAL(){ toast('Azure AD desactivado — esta app usa Power Au
 async function spGetList(listName, select='', filter=''){
   if(!CFG.paUrlDATA) return null;
   try{
+    // Build payload — only include filter if not empty (empty $filter causes SP error)
+    const payload = { action:'getItems', list:listName };
+    if(filter) payload.filter = filter;
+    if(select) payload.select = select;
     const resp = await fetchPA(CFG.paUrlDATA, {
       method:'POST',
-      body: JSON.stringify({ action:'getItems', list:listName, select, filter })
+      body: JSON.stringify(payload)
     });
     if(!resp.ok) throw new Error('HTTP '+resp.status);
     const data = await resp.json();
@@ -1136,15 +1140,24 @@ async function loadDataFromSP(){
     }
     // Buses
     const buses = await spGetList('TS_Buses','','');
+    console.log('🚌 TS_Buses raw count:', buses?buses.length:'null');
     if(buses&&buses.length){
+      console.log('🚌 TS_Buses sample fields:', JSON.stringify(Object.keys(buses[0])));
+      console.log('🚌 TS_Buses sample record:', JSON.stringify(buses[0]));
       Object.keys(SP_BUSES).forEach(k=>delete SP_BUSES[k]);
       buses.filter(b=>b.Activo!==false&&b.Activo!==0&&b.Activo!=='No').forEach(b=>{
+        // Año puede venir como Anio, Año, A_x00f1_o, etc.
+        const anio = b.Anio || b['Año'] || b.A_x00f1_o || b.Ano || b.anio || 2020;
+        // Carrocería puede venir como Carroceria, Carrocería, con/sin tilde
+        const carroceria = b.Carroceria || b['Carrocería'] || b.Carrocer_x00ed_a || '';
         SP_BUSES[b.Title]={
-          marca:b.Marca||'', modelo:b.Modelo||'', carroceria:b.Carroceria||'',
+          marca:b.Marca||'', modelo:b.Modelo||'', carroceria:choiceVal(carroceria),
           asientos:b.Asientos||0, tipoUnidad:choiceVal(b.TipoUnidad)||'Bus',
-          anio:b.Anio||2020, tercerizada:!!(b.EmpresaTercera),
+          anio: typeof anio === 'number' ? anio : parseInt(String(anio).replace(/\./g,''))||2020,
+          tercerizada:!!(b.EmpresaTercera),
           empresaTerc:b.EmpresaTercera||'', pasajeros:Math.max(0,(b.Asientos||2)-2)
         };
+        console.log('🚌 Bus:', b.Title, '| carroceria:', choiceVal(carroceria), '| anio:', anio, '| tipo:', choiceVal(b.TipoUnidad));
       });
     }
     // Conductores
@@ -1156,6 +1169,19 @@ async function loadDataFromSP(){
         licCateg:choiceVal(c.LicenciaCategoria), vencLic:c.FechaVencLic?c.FechaVencLic.split('T')[0]:'', activo:true
       }));
     }
+    // Rutas (si existe la lista TS_Rutas en SP)
+    try{
+      const rutas = await spGetList('TS_Rutas','','');
+      if(rutas&&rutas.length){
+        console.log('🛣️ TS_Rutas loaded:', rutas.length);
+        SP_RUTAS.length=0;
+        rutas.forEach(r=> SP_RUTAS.push({
+          id:r.ID||r.Id, nombre:r.Title||'', empresa:r.Empresa||'—', proyecto:r.Proyecto||''
+        }));
+      } else {
+        console.log('🛣️ TS_Rutas: no data or list not found, using mock routes');
+      }
+    }catch(e){ console.log('🛣️ TS_Rutas not available, using mock routes'); }
     // Acciones (tareas) — Estado is Choice, filter with Value syntax
     const acciones = await spGetList('TS_Acciones','','');
     if(acciones&&acciones.length){
