@@ -1145,19 +1145,32 @@ async function loadDataFromSP(){
       console.log('🚌 TS_Buses sample fields:', JSON.stringify(Object.keys(buses[0])));
       console.log('🚌 TS_Buses sample record:', JSON.stringify(buses[0]));
       Object.keys(SP_BUSES).forEach(k=>delete SP_BUSES[k]);
+
+      // Helper: find field value by partial key match (handles SP OData encoding of accents)
+      const findField = (obj, ...patterns) => {
+        for(const pattern of patterns){
+          const pl = pattern.toLowerCase();
+          for(const key of Object.keys(obj)){
+            if(key.toLowerCase().includes(pl)) return obj[key];
+          }
+        }
+        return null;
+      };
+
       buses.filter(b=>b.Activo!==false&&b.Activo!==0&&b.Activo!=='No').forEach(b=>{
-        // Año puede venir como Anio, Año, A_x00f1_o, etc.
-        const anio = b.Anio || b['Año'] || b.A_x00f1_o || b.Ano || b.anio || 2020;
-        // Carrocería puede venir como Carroceria, Carrocería, con/sin tilde
-        const carroceria = b.Carroceria || b['Carrocería'] || b.Carrocer_x00ed_a || '';
+        const carroceria = findField(b, 'carrocer', 'Carrocer');
+        const tipoUnidad = findField(b, 'tipounidad', 'TipoUnidad', 'tipo');
+        const anio = findField(b, 'anio', 'año', 'Ano');
+        const empresaTerc = findField(b, 'empresaterc', 'EmpresaTercera');
+
         SP_BUSES[b.Title]={
           marca:b.Marca||'', modelo:b.Modelo||'', carroceria:choiceVal(carroceria),
-          asientos:b.Asientos||0, tipoUnidad:choiceVal(b.TipoUnidad)||'Bus',
-          anio: typeof anio === 'number' ? anio : parseInt(String(anio).replace(/\./g,''))||2020,
-          tercerizada:!!(b.EmpresaTercera),
-          empresaTerc:b.EmpresaTercera||'', pasajeros:Math.max(0,(b.Asientos||2)-2)
+          asientos:b.Asientos||0, tipoUnidad:choiceVal(tipoUnidad)||'Bus',
+          anio: typeof anio === 'number' ? anio : parseInt(String(anio||2020).replace(/\./g,''))||2020,
+          tercerizada:!!empresaTerc,
+          empresaTerc:empresaTerc||'', pasajeros:Math.max(0,(b.Asientos||2)-2)
         };
-        console.log('🚌 Bus:', b.Title, '| carroceria:', choiceVal(carroceria), '| anio:', anio, '| tipo:', choiceVal(b.TipoUnidad));
+        console.log('🚌 Bus:', b.Title, '| carroceria:', choiceVal(carroceria), '| anio:', anio, '| tipo:', choiceVal(tipoUnidad));
       });
     }
     // Conductores
