@@ -1158,10 +1158,13 @@ async function loadDataFromSP(){
       };
 
       buses.filter(b=>b.Activo!==false&&b.Activo!==0&&b.Activo!=='No').forEach(b=>{
-        const carroceria = findField(b, 'carrocer', 'Carrocer');
-        const tipoUnidad = findField(b, 'tipounidad', 'TipoUnidad', 'tipo');
-        const anio = findField(b, 'anio', 'año', 'Ano');
-        const empresaTerc = findField(b, 'empresaterc', 'EmpresaTercera');
+        // Use exact SP internal field names
+        const carroceria = b['Carrocer_x00ed_a'] || b['Carrocería'] || b.Carroceria || '';
+        const tipoUnidad = b['TipoUnidad'] || '';
+        const anio = b['A_x00f1_o'] || b['Año'] || b.Anio || b.Ano || 2020;
+        const empresaTerc = b['EmpresaTercera'] || '';
+
+        console.log('🚌 RAW fields for', b.Title, '→ carrocer:', JSON.stringify(carroceria), '| tipo:', JSON.stringify(tipoUnidad), '| anio:', JSON.stringify(anio));
 
         SP_BUSES[b.Title]={
           marca:b.Marca||'', modelo:b.Modelo||'', carroceria:choiceVal(carroceria),
@@ -1170,7 +1173,7 @@ async function loadDataFromSP(){
           tercerizada:!!empresaTerc,
           empresaTerc:empresaTerc||'', pasajeros:Math.max(0,(b.Asientos||2)-2)
         };
-        console.log('🚌 Bus:', b.Title, '| carroceria:', choiceVal(carroceria), '| anio:', anio, '| tipo:', choiceVal(tipoUnidad));
+        console.log('🚌 PARSED:', b.Title, '| carroceria:', choiceVal(carroceria), '| anio:', SP_BUSES[b.Title].anio, '| tipo:', SP_BUSES[b.Title].tipoUnidad);
       });
     }
     // Conductores
