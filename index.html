@@ -1106,9 +1106,13 @@ async function loadDataFromSP(){
   if(!CFG.paUrlDATA) return; // Sin flujo de datos, usa datos mock
   toast('🔄 Cargando datos desde SharePoint via Power Automate...','inf');
   try{
-    // Helper: SharePoint Choice columns come as {Value:"text"} or plain string
+    // Helper: SharePoint Choice columns come as:
+    // - plain string: "IRIZAR"
+    // - object: {Value:"IRIZAR"}  
+    // - ARRAY of objects: [{Value:"IRIZAR"}]  ← this is what PA returns!
     const choiceVal = (v) => {
       if(v===null||v===undefined) return '';
+      if(Array.isArray(v)) return v.length>0 ? (v[0].Value||v[0].value||'') : '';
       if(typeof v === 'object') return v.Value||v.value||'';
       return String(v);
     };
