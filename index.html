@@ -2791,10 +2791,37 @@ async function enviarCL(){
   try{
     if(CFG.configured && CFG.paUrlCL){
       // ─── PRODUCCIÓN: POST real a Power Automate ───
+      // Enviar SOLO los campos que el flow espera (schema del trigger)
+      const paPayload = {
+        codigo: payload.codigo,
+        sgNum: payload.sgNum,
+        fecha: payload.fecha,
+        hora: payload.hora || '',
+        placa: payload.placa,
+        marca: payload.marca,
+        ruta: payload.ruta,
+        conductor: payload.conductor,
+        supervisor: payload.supervisor,
+        emailSupervisor: payload.emailSupervisor || user.email,
+        pasajeros: parseInt(payload.pasajeros)||0,
+        kilometraje: parseInt(payload.kilometraje)||0,
+        totalHallazgos: parseInt(payload.totalHallazgos)||0,
+        hallazgosAlto: parseInt(payload.hallazgosAlto)||0,
+        pdfBase64: payload.pdfBase64 || '',
+        hallazgos: (payload.hallazgos||[]).map(h=>({
+          item: h.item||'',
+          nivel: h.nivel||'',
+          prioridad: h.prioridad||'',
+          responsable: h.responsable||'',
+          emailResponsable: h.emailResponsable||'',
+          fechaLimite: h.fechaLimite||'',
+          accionCorrectiva: h.accionCorrectiva||''
+        }))
+      };
+      console.log('📤 CL payload to PA:', JSON.stringify(paPayload).substring(0,500));
       const resp = await fetchPA(CFG.paUrlCL,{
         method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify(payload)
+        body:JSON.stringify(paPayload)
       });
       if(!resp.ok && resp.status!==202) throw new Error('Power Automate devolvió HTTP '+resp.status);
       // PA puede devolver 202 Accepted (asincrónico) o 200 con JSON
