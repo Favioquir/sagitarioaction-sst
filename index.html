@@ -239,19 +239,19 @@ textarea.inp{resize:none}
     </div>
 
     <!-- Login con email + contraseña — sin Azure AD -->
-    <div id="manual-login-wrap">
+    <form id="manual-login-wrap" autocomplete="on" onsubmit="event.preventDefault();doLogin();">
       <div class="field">
         <label class="lbl">Correo electrónico</label>
-        <input class="inp" type="email" id="login-email" placeholder="nombre@sagitario.com"
+        <input class="inp" type="email" id="login-email" name="email" placeholder="nombre@sagitario.com"
           autocomplete="username" oninput="onLoginInput()">
       </div>
       <div class="field">
         <label class="lbl">Contraseña</label>
         <div style="position:relative">
-          <input class="inp" type="password" id="login-pwd" placeholder="••••••••"
+          <input class="inp" type="password" id="login-pwd" name="password" placeholder="••••••••"
             autocomplete="current-password" oninput="onLoginInput()"
             onkeydown="if(event.key==='Enter')doLogin()" style="padding-right:40px">
-          <button onclick="togglePwd()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--tx3);cursor:pointer;font-size:15px" id="btn-show-pwd">👁</button>
+          <button type="button" onclick="togglePwd()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--tx3);cursor:pointer;font-size:15px" id="btn-show-pwd">👁</button>
         </div>
       </div>
 
@@ -267,8 +267,8 @@ textarea.inp{resize:none}
         </div>
       </div>
 
-      <button class="btn btn-amber" id="btn-login" onclick="doLogin()" disabled style="opacity:.4">Ingresar al sistema →</button>
-    </div>
+      <button type="submit" class="btn btn-amber" id="btn-login" disabled style="opacity:.4">Ingresar al sistema →</button>
+    </form>
     <p style="text-align:center;font-size:10px;color:var(--tx3);margin-top:12px">Sagitario SST v1.0 · Login seguro con contraseña</p>
   </div>
 </div>
@@ -342,7 +342,7 @@ textarea.inp{resize:none}
       </div>
       <div class="row2">
         <div class="field"><label class="lbl">N° Asientos</label><input class="inp" id="cl-asientos" placeholder="—" readonly style="opacity:.7"></div>
-        <div class="field"><label class="lbl">N° Pasajeros <span style="color:var(--amber)">*</span></label><input class="inp" id="cl-pasajeros" type="number" min="1" max="60" placeholder="Ingresa" style="font-weight:700" oninput="clForm.pasajeros=this.value"><div style="font-size:10px;color:var(--tx3);margin-top:3px">Varía por viaje</div></div>
+        <div class="field"><label class="lbl">N° Pasajeros <span style="color:var(--amber)">*</span></label><input class="inp" id="cl-pasajeros" type="number" min="0" max="60" placeholder="Ingresa" style="font-weight:700" oninput="clForm.pasajeros=this.value"><div style="font-size:10px;color:var(--tx3);margin-top:3px">Varía por viaje</div></div>
       </div>
       <div class="field" id="f-tercerizada-info" style="display:none">
         <div style="background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:var(--r2);padding:9px 12px;font-size:12px;color:#fde68a">
@@ -366,9 +366,10 @@ textarea.inp{resize:none}
       </div>
       <div class="field">
         <label class="lbl">Conductor *</label>
-        <select class="inp" id="cl-conductor-sel" onchange="selConductor(this.value)">
-          <option value="">— Seleccionar conductor —</option>
-        </select>
+        <input class="inp" id="cl-conductor-search" placeholder="Buscar por nombre o DNI..."
+          autocomplete="off" oninput="filterConductores(this.value)" onfocus="filterConductores(this.value)">
+        <div id="cl-conductor-results" style="display:none;max-height:180px;overflow-y:auto;background:var(--bg3);border:1px solid var(--bd2);border-radius:var(--r3);margin-top:4px"></div>
+        <input type="hidden" id="cl-conductor-sel" value="">
         <div id="conductor-badge" style="display:none;margin-top:6px;background:rgba(22,163,74,.1);border:1px solid rgba(22,163,74,.3);border-radius:var(--r2);padding:8px 11px;font-size:11.5px;color:#86efac"></div>
       </div>
       <div class="field"><label class="lbl">Lugar de inspección</label><input class="inp" id="cl-lugar" placeholder="Patio operaciones Cajamarca"></div>
@@ -1248,16 +1249,16 @@ async function checkSPLists(){
 // ── Test de flows PA ──
 async function testAllFlows(){
   const flows = [
-    {key:'data',url:CFG.paUrlDATA,name:'Datos SP (lectura)'},
-    {key:'cl', url:CFG.paUrlCL, name:'Check List'},
-    {key:'sol',url:CFG.paUrlSOL,name:'Solicitudes'},
-    {key:'ev', url:CFG.paUrlEV, name:'Evidencias'},
-    {key:'rec',url:CFG.paUrlREC,name:'Recordatorios'},
+    {key:'data',url:CFG.paUrlDATA,name:'Datos SP (lectura)', body:{action:'getItems',list:'TS_Personal'}},
+    {key:'cl', url:CFG.paUrlCL, name:'Check List', body:{codigo:'TEST',sgNum:'TEST',fecha:'01/01/2026',hora:'00:00',placa:'TEST',marca:'TEST',ruta:'TEST',conductor:'TEST',supervisor:'TEST',emailSupervisor:'test@test.com',pasajeros:0,kilometraje:0,totalHallazgos:0,hallazgosAlto:0,pdfBase64:'',hallazgos:[]}},
+    {key:'sol',url:CFG.paUrlSOL,name:'Solicitudes', body:{titulo:'TEST',descripcion:'TEST',prioridad:'Baja',responsable:'TEST',emailResponsable:'test@test.com',fechaLimite:'2026-12-31',accionCorrectiva:'TEST',placa:'TEST',emailCreador:'test@test.com'}},
+    {key:'ev', url:CFG.paUrlEV, name:'Evidencias', body:{accionSPId:0,comentarioCierre:'TEST',estadoNuevo:'Abierto',emailResponsable:'test@test.com',nombreResponsable:'TEST'}},
+    {key:'rec',url:CFG.paUrlREC,name:'Recordatorios', body:{tipo:'individual',emailDestino:'test@test.com',nombre:'TEST',tareas:[]}},
   ];
   for(const f of flows){
     if(!f.url){toast(`⚠️ ${f.name}: URL no configurada`,'inf');continue;}
     try{
-      const r=await fetchPA(f.url,{method:'POST',body:JSON.stringify({test:true,ts:Date.now()})});
+      const r=await fetchPA(f.url,{method:'POST',body:JSON.stringify(f.body)});
       toast(`${r.ok||r.status===202?'✅':'⚠️'} Flow ${f.name}: HTTP ${r.status}`,'ok');
     }catch(e){toast(`❌ Flow ${f.name}: ${e.message}`,'err');}
     await new Promise(r=>setTimeout(r,600));
@@ -1859,6 +1860,8 @@ function initCL(){
   if(condBadge)condBadge.style.display='none';
   const condSel=document.getElementById('cl-conductor-sel');
   if(condSel)condSel.value='';
+  const condSearch=document.getElementById('cl-conductor-search');
+  if(condSearch)condSearch.value='';
   const cv=document.getElementById('card-vehiculo');
   const ci=document.getElementById('card-inspeccion');
   const nb=document.getElementById('btn-cl1-next');
@@ -2023,13 +2026,55 @@ function loadSPRoutes(){
   });
 }
 function loadSPConductores(){
-  const sel=document.getElementById('cl-conductor-sel');
-  if(!sel)return;
-  sel.innerHTML='<option value="">— Seleccionar conductor —</option>'+
-    SP_CONDUCTORES.filter(c=>c.activo).map(c=>
-      `<option value="${c.nombre}">${c.nombre} · DNI ${c.dni} · Cat. ${c.licCateg}</option>`
-    ).join('');
+  // No longer populates a select — conductor search is handled by filterConductores()
+  const searchEl = document.getElementById('cl-conductor-search');
+  if(searchEl) searchEl.value = '';
+  const selEl = document.getElementById('cl-conductor-sel');
+  if(selEl) selEl.value = '';
+  const badge = document.getElementById('conductor-badge');
+  if(badge) badge.style.display = 'none';
 }
+
+function filterConductores(query){
+  const resultsEl = document.getElementById('cl-conductor-results');
+  if(!resultsEl) return;
+  const q = (query||'').toLowerCase().trim();
+  if(q.length < 1){ resultsEl.style.display='none'; return; }
+  const matches = SP_CONDUCTORES.filter(c=>c.activo && (
+    c.nombre.toLowerCase().includes(q) || (c.dni||'').includes(q)
+  )).slice(0,10);
+  if(matches.length===0){
+    resultsEl.innerHTML='<div style="padding:10px;color:var(--tx3);font-size:12px">No se encontraron conductores</div>';
+  } else {
+    resultsEl.innerHTML = matches.map(c=>
+      `<div style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--bd);font-size:12px" 
+        onmouseover="this.style.background='var(--bg4)'" onmouseout="this.style.background=''" 
+        onclick="pickConductor('${c.nombre.replace(/'/g,"\\'")}','${c.dni}','${c.licCateg}')">
+        <span style="font-weight:600">${c.nombre}</span> · DNI ${c.dni} · Cat. ${c.licCateg}
+      </div>`
+    ).join('');
+  }
+  resultsEl.style.display='block';
+}
+
+function pickConductor(nombre, dni, lic){
+  const searchEl = document.getElementById('cl-conductor-search');
+  const selEl = document.getElementById('cl-conductor-sel');
+  const resultsEl = document.getElementById('cl-conductor-results');
+  if(searchEl) searchEl.value = nombre;
+  if(selEl) selEl.value = nombre;
+  if(resultsEl) resultsEl.style.display = 'none';
+  selConductor(nombre);
+}
+
+// Close conductor results when clicking outside
+document.addEventListener('click', function(e){
+  const resultsEl = document.getElementById('cl-conductor-results');
+  const searchEl = document.getElementById('cl-conductor-search');
+  if(resultsEl && searchEl && !searchEl.contains(e.target) && !resultsEl.contains(e.target)){
+    resultsEl.style.display='none';
+  }
+});
 
 function setPill(el,group,val){
   const parent=el.closest('.pills')||el.parentElement;
