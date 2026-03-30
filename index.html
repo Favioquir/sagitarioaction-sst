@@ -2469,7 +2469,7 @@ function updateProgress(){
 
 function cl2Next(){
   const pasajeros=document.getElementById('cl-pasajeros').value;
-  if(!pasajeros||parseInt(pasajeros)<1){
+  if(pasajeros===''||pasajeros===null||pasajeros===undefined||parseInt(pasajeros)<0){
     toast('Ingresa el N° de pasajeros del viaje','err');
     go('s-cl1'); // volver a paso 1
     setTimeout(()=>document.getElementById('cl-pasajeros').focus(),300);
@@ -2595,7 +2595,7 @@ function cl1Next(){
   if(!placa){toast('Busca primero el vehículo por placa','err');return;}
   if(!ruta){toast('Selecciona la ruta','err');return;}
   if(!cond){toast('Selecciona el conductor','err');return;}
-  if(!pasajeros||parseInt(pasajeros)<1){toast('Ingresa el N° de pasajeros','err');document.getElementById('cl-pasajeros').focus();return;}
+  if(pasajeros===''||pasajeros===null||pasajeros===undefined||parseInt(pasajeros)<0){toast('Ingresa el N° de pasajeros','err');document.getElementById('cl-pasajeros').focus();return;}
   clForm={
     placa,anio:document.getElementById('cl-anio').value,
     marca:document.getElementById('cl-marca').value,
@@ -2999,7 +2999,7 @@ function downloadPDF(returnBase64){
       const COL=[{lw:18,vw:42},{lw:22,vw:44},{lw:18,vw:46}];
       const info=[
         ['EMPRESA',       'Transportes Sagitario S.R.L.',
-         'FECHA',         lastCL.fecha,
+         'FECHA',         lastCL.fecha+' '+lastCL.hora,
          'LUGAR',         lastCL.lugar||'—'],
         ['PLACA',         lastCL.placa,
          'RUTA',          lastCL.ruta,
@@ -3012,7 +3012,7 @@ function downloadPDF(returnBase64){
          'TIPO UNIDAD',   lastCL.tipoUnidad||'—'],
         ['CONDUCTOR',     lastCL.conductor,
          'INSPECTOR / SUPERVISOR', lastCL.supervisor,
-         'INSP. SGS',     lastCL.sgs||'—'],
+         'INSP. TS-SST',     lastCL.sgs||'—'],
       ];
       const rowH=6.5;
       info.forEach(row=>{
@@ -3098,7 +3098,9 @@ function downloadPDF(returnBase64){
           doc.setDrawColor(120,120,120);doc.rect(x+10,y+.8,3.5,3,'S');
           if(v==='N/A'){doc.setTextColor(255,255,255);doc.setFontSize(5);doc.text('N/A',x+10.2,y+3);}
           doc.setTextColor(0,0,0);doc.setFont('helvetica','normal');doc.setFontSize(5.8);
-          doc.text(item.t.slice(0,36),x+14.5,y+3);
+          const itemDate=lastCL.clDates&&lastCL.clDates[item.id];
+          const itemTxt=item.t.slice(0,32)+(itemDate?' ['+itemDate+']':'');
+          doc.text(itemTxt,x+14.5,y+3);
         });
         y+=rh;
         if(y>268){doc.addPage();y=12;}
@@ -3283,10 +3285,126 @@ function downloadPDF(returnBase64){
       // ── OBSERVATIONS ──
       if(lastCL.obs&&lastCL.obs.trim()){
         doc.setFont('helvetica','bold');doc.setFontSize(7);doc.setTextColor(0,0,0);
-        doc.text('OBSERVACIONES:',M,y);y+=5;
+        doc.text('OBSERVACIONES GENERALES:',M,y);y+=5;
         doc.setFont('helvetica','normal');
         const lines=doc.splitTextToSize(lastCL.obs,W-M*2);
         doc.text(lines,M,y);y+=lines.length*4+4;
+      }
+      if(lastCL.observVehiculo&&lastCL.observVehiculo.trim()){
+        doc.setFont('helvetica','bold');doc.setFontSize(7);doc.setTextColor(0,0,0);
+        doc.text('OBSERVACIONES DEL VEHÍCULO:',M,y);y+=5;
+        doc.setFont('helvetica','normal');
+        const lines2=doc.splitTextToSize(lastCL.observVehiculo,W-M*2);
+        doc.text(lines2,M,y);y+=lines2.length*4+4;
+      }
+
+      // ── REGISTRO COMPLETO DE INSPECCIÓN ──
+      const allItemsFlat=[...CL.alto,...CL.inter,...CL.bajo,...CL.docs_vehiculo,...CL.docs_inter,...CL.docs_conductor];
+      const inspectedItems=allItemsFlat.filter(i=>lastCL.clVals[i.id]); // All items that were marked
+      if(inspectedItems.length>0){
+        if(y>200){doc.addPage();y=12;}
+        doc.setFillColor(0,50,130);doc.rect(M,y,TW,7,'F');
+        doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(7.5);
+        doc.text('REGISTRO COMPLETO DE INSPECCIÓN — Todos los ítems evaluados',W/2,y+4.5,{align:'center'});
+        y+=7;
+        // Summary bar
+        const totalOK=inspectedItems.filter(i=>lastCL.clVals[i.id]==='OK').length;
+        const totalNO=inspectedItems.filter(i=>lastCL.clVals[i.id]==='NO').length;
+        const totalNA=inspectedItems.filter(i=>lastCL.clVals[i.id]==='N/A').length;
+        doc.setFillColor(240,245,255);doc.rect(M,y,TW,5.5,'F');
+        doc.setDrawColor(180,180,200);doc.rect(M,y,TW,5.5,'S');
+        doc.setTextColor(30,30,80);doc.setFont('helvetica','bold');doc.setFontSize(6);
+        doc.text(`Total evaluados: ${inspectedItems.length}  |  OK: ${totalOK}  |  NO: ${totalNO}  |  N/A: ${totalNA}  |  Fecha inspección: ${lastCL.fecha} ${lastCL.hora}`,M+4,y+3.8);
+        y+=5.5;
+        // Table header
+        const obsColW=[7,55,12,30,40,46];
+        ['N°','ÍTEM','RESULT','NIVEL','FECHA','OBSERVACIÓN'].forEach((h,i)=>{
+          const cx=M+obsColW.slice(0,i).reduce((a,b)=>a+b,0);
+          doc.setFillColor(220,225,245);doc.rect(cx,y,obsColW[i],5.5,'F');
+          doc.setDrawColor(180,180,200);doc.rect(cx,y,obsColW[i],5.5,'S');
+          doc.setTextColor(30,30,80);doc.setFont('helvetica','bold');doc.setFontSize(5);
+          doc.text(h,cx+1.5,y+3.8);
+        });
+        y+=5.5;
+        // Determine item levels
+        const altoIds=new Set(CL.alto.map(i=>i.id));
+        const interIds=new Set(CL.inter.map(i=>i.id));
+        const bajoIds=new Set(CL.bajo.map(i=>i.id));
+        inspectedItems.forEach((item,idx)=>{
+          const v=lastCL.clVals[item.id]||'—';
+          const obs=(lastCL.clObs&&lastCL.clObs[item.id])||'';
+          const date=(lastCL.clDates&&lastCL.clDates[item.id])||'';
+          const nivel=altoIds.has(item.id)?'ALTO':interIds.has(item.id)?'INTER':bajoIds.has(item.id)?'BAJO':'DOC';
+          const rh=5;
+          if(y>268){doc.addPage();y=12;}
+          // Row background - red tint for NO items
+          if(v==='NO') doc.setFillColor(255,240,240);
+          else doc.setFillColor(idx%2===0?255:248,idx%2===0?255:248,idx%2===0?255:255);
+          const totalW=obsColW.reduce((a,b)=>a+b,0);
+          doc.rect(M,y,totalW,rh,'F');
+          doc.setDrawColor(205,205,215);doc.rect(M,y,totalW,rh,'S');
+          const vals=[String(idx+1),item.t.slice(0,32),v,nivel,date,obs.slice(0,26)];
+          vals.forEach((val,i)=>{
+            const cx=M+obsColW.slice(0,i).reduce((a,b)=>a+b,0);
+            doc.setDrawColor(205,205,215);doc.line(cx,y,cx,y+rh);
+            // Color coding for result
+            if(i===2){
+              if(val==='OK') doc.setTextColor(22,120,50);
+              else if(val==='NO') doc.setTextColor(180,0,0);
+              else doc.setTextColor(100,100,110);
+              doc.setFont('helvetica','bold');
+            } else if(i===3){
+              if(val==='ALTO') doc.setTextColor(170,0,0);
+              else if(val==='INTER') doc.setTextColor(160,110,0);
+              else doc.setTextColor(30,110,40);
+              doc.setFont('helvetica','bold');
+            } else {
+              doc.setTextColor(0,0,0);doc.setFont('helvetica','normal');
+            }
+            doc.setFontSize(5);
+            doc.text(val,cx+1.5,y+3.3);
+          });
+          y+=rh;
+        });
+        y+=4;
+      }
+
+      // ── DETALLE DE HALLAZGOS / ACCIONES CORRECTIVAS ──
+      if(lastCL.allNO&&lastCL.allNO.length>0){
+        if(y>200){doc.addPage();y=12;}
+        doc.setFillColor(170,0,0);doc.rect(M,y,TW,7,'F');
+        doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(7.5);
+        doc.text('HALLAZGOS — ACCIONES CORRECTIVAS ASIGNADAS',W/2,y+4.5,{align:'center'});
+        y+=7;
+        // Header
+        const hColW=[8,45,15,30,35,25,32];
+        ['N°','HALLAZGO','NIVEL','RESPONSABLE','ACCIÓN CORRECTIVA','FECHA LÍMITE','PRIORIDAD'].forEach((h,i)=>{
+          const cx=M+hColW.slice(0,i).reduce((a,b)=>a+b,0);
+          doc.setFillColor(255,235,235);doc.rect(cx,y,hColW[i],5.5,'F');
+          doc.setDrawColor(180,150,150);doc.rect(cx,y,hColW[i],5.5,'S');
+          doc.setTextColor(120,0,0);doc.setFont('helvetica','bold');doc.setFontSize(5);
+          doc.text(h,cx+1.5,y+3.8);
+        });
+        y+=5.5;
+        lastCL.allNO.forEach((h,idx)=>{
+          const rh=6;
+          if(y>268){doc.addPage();y=12;}
+          doc.setFillColor(idx%2===0?255:252,idx%2===0?255:248,idx%2===0?255:248);
+          const totalW=hColW.reduce((a,b)=>a+b,0);
+          doc.rect(M,y,totalW,rh,'F');
+          doc.setDrawColor(205,195,195);doc.rect(M,y,totalW,rh,'S');
+          const vals=[String(idx+1),(h.item||'').slice(0,25),h.nivel||'',
+            (h.responsable||'').slice(0,18),(h.accionCorrectiva||'').slice(0,20),
+            h.fechaLimite||'—',h.prioridad||''];
+          vals.forEach((val,i)=>{
+            const cx=M+hColW.slice(0,i).reduce((a,b)=>a+b,0);
+            doc.setDrawColor(205,195,195);doc.line(cx,y,cx,y+rh);
+            doc.setTextColor(0,0,0);doc.setFont('helvetica','normal');doc.setFontSize(5);
+            doc.text(val,cx+1.5,y+4);
+          });
+          y+=rh;
+        });
+        y+=4;
       }
 
       // ── SIGNATURE TABLE ──
