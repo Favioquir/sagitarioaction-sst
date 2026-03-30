@@ -375,7 +375,7 @@ textarea.inp{resize:none}
       <div class="field"><label class="lbl">Lugar de inspección</label><input class="inp" id="cl-lugar" placeholder="Patio operaciones Cajamarca"></div>
       <div class="field"><label class="lbl">Kilometraje actual</label><input class="inp" id="cl-km" type="number" placeholder="125000"></div>
       <div class="field">
-        <label class="lbl">N° Inspección SGS</label>
+        <label class="lbl">N° Inspección TS-SST</label>
         <div style="display:flex;gap:8px;align-items:center">
           <input class="inp" id="cl-sgs" placeholder="Auto-generado" style="flex:1;opacity:.7" readonly>
           <span style="font-size:10px;color:var(--green3);white-space:nowrap">🔢 Correlativo</span>
@@ -741,7 +741,7 @@ textarea.inp{resize:none}
       </div>
       <div class="field">
         <label class="lbl">Referencia / N° documento</label>
-        <input class="inp" id="sol-ref" placeholder="SGS-047-2026, Acta N°03...">
+        <input class="inp" id="sol-ref" placeholder="TS-SST-047-2026, Acta N°03...">
       </div>
       <div class="field">
         <label class="lbl">Placa del vehículo (si aplica)</label>
@@ -914,7 +914,7 @@ textarea.inp{resize:none}
       <div class="card-h">📊 Estado SharePoint — Listas y Bibliotecas</div>
       <button class="btn btn-ghost btn-sm" onclick="checkSPLists()" style="margin-bottom:10px">🔄 Verificar listas</button>
       <div id="cfg-sp-status">
-        <div class="dr"><span class="dk">SGS Correlativo actual</span><span class="dv" style="color:var(--amber);font-size:11px" id="cfg-sgs-val">—</span></div>
+        <div class="dr"><span class="dk">TS-SST Correlativo actual</span><span class="dv" style="color:var(--amber);font-size:11px" id="cfg-sgs-val">—</span></div>
         <div id="cfg-sp-lists-status"></div>
       </div>
     </div>
@@ -1397,7 +1397,7 @@ function spRolColor(rol){
 let sgsCounter = 46;
 function getNextSGS(){
   sgsCounter++;
-  return `SGS-${String(sgsCounter).padStart(3,'0')}-${new Date().getFullYear()}`;
+  return `TS-SST-${String(sgsCounter).padStart(3,'0')}-${new Date().getFullYear()}`;
 }
 // USERS ahora viene de SP_PERSONAL (no hardcoded)
 // role/user se setean en doLogin()
@@ -2658,7 +2658,7 @@ function buildConfirm(){
     '<div class="dr"><span class="dk">Ruta</span><span class="dv">'+clForm.ruta+'</span></div>'+
     '<div class="dr"><span class="dk">Conductor</span><span class="dv">'+clForm.conductor+'</span></div>'+
     '<div class="dr"><span class="dk">Supervisor</span><span class="dv">'+clForm.supervisor+'</span></div>'+
-    '<div class="dr"><span class="dk">N° SGS</span><span class="dv" style="color:var(--amber)">'+clForm.sgs+'</span></div>'+
+    '<div class="dr"><span class="dk">N° TS-SST</span><span class="dv" style="color:var(--amber)">'+clForm.sgs+'</span></div>'+
     '<div class="dr"><span class="dk">Fecha / Hora</span><span class="dv">'+clForm.fecha+' '+clForm.hora+'</span></div>'+
     '<div class="dr"><span class="dk">Kilometraje</span><span class="dv">'+(clForm.km||'—')+' km</span></div>'+
     (totalGolpes>0?'<div class="dr"><span class="dk">⚠️ Golpes</span><span class="dv" style="color:#fca5a5">'+totalGolpes+' daño(s) marcado(s)</span></div>':'')+
@@ -2837,9 +2837,20 @@ async function enviarCL(){
   // ── HTTP POST a Power Automate ──
   const btnEnviar=document.getElementById('btn-enviar');
   btnEnviar.disabled=true;
-  btnEnviar.textContent='⏳ Enviando a Power Automate...';
+  btnEnviar.textContent='⏳ Generando PDF...';
 
   try{
+    // Generar PDF ANTES de enviar a PA
+    let pdfBase64 = '';
+    try{
+      pdfBase64 = await downloadPDF(true); // true = return base64, don't save locally
+      console.log('📄 PDF generated, base64 length:', pdfBase64.length);
+    }catch(pdfErr){
+      console.warn('PDF generation failed, sending without PDF:', pdfErr);
+    }
+
+    btnEnviar.textContent='⏳ Enviando a Power Automate...';
+
     if(CFG.configured && CFG.paUrlCL){
       // ─── PRODUCCIÓN: POST real a Power Automate ───
       // Enviar SOLO los campos que el flow espera (schema del trigger)
@@ -2858,7 +2869,7 @@ async function enviarCL(){
         kilometraje: parseInt(payload.kilometraje)||0,
         totalHallazgos: parseInt(payload.totalHallazgos)||0,
         hallazgosAlto: parseInt(payload.hallazgosAlto)||0,
-        pdfBase64: payload.pdfBase64 || '',
+        pdfBase64: pdfBase64,
         hallazgos: (payload.hallazgos||[]).map(h=>({
           item: h.item||'',
           nivel: h.nivel||'',
@@ -2869,7 +2880,7 @@ async function enviarCL(){
           accionCorrectiva: h.accionCorrectiva||''
         }))
       };
-      console.log('📤 CL payload to PA:', JSON.stringify(paPayload).substring(0,500));
+      console.log('📤 CL payload to PA (pdfBase64 length):', pdfBase64.length);
       const resp = await fetchPA(CFG.paUrlCL,{
         method:'POST',
         body:JSON.stringify(paPayload)
@@ -2891,7 +2902,7 @@ async function enviarCL(){
       :'Inspección completada sin hallazgos. PDF enviado a 6 destinatarios.';
     document.getElementById('ok-details').innerHTML=
       '<div class="dr"><span class="dk">Bus</span><span class="dv">'+clForm.placa+'</span></div>'+
-      '<div class="dr"><span class="dk">N° SGS</span><span class="dv" style="color:var(--amber)">'+clForm.sgs+'</span></div>'+
+      '<div class="dr"><span class="dk">N° TS-SST</span><span class="dv" style="color:var(--amber)">'+clForm.sgs+'</span></div>'+
       '<div class="dr"><span class="dk">Código</span><span class="dv" style="font-size:11px">'+clID+'</span></div>'+
       '<div class="dr"><span class="dk">Hallazgos</span><span class="dv">'+n+'</span></div>'+
       '<div class="dr"><span class="dk">Responsables</span><span class="dv" style="color:var(--green3)">✅ Notificados</span></div>'+
@@ -2912,11 +2923,12 @@ async function enviarCL(){
 // ═══════════════════════════════════════
 // PDF GENERATION WITH SIGNATURES
 // ═══════════════════════════════════════
-function downloadPDF(){
-  if(!lastCL){toast('No hay datos para generar PDF','err');return;}
+function downloadPDF(returnBase64){
+  return new Promise((resolve,reject)=>{
+  if(!lastCL){toast('No hay datos para generar PDF','err');reject('No data');return;}
   const btn=document.querySelector('#s-cl-ok .btn-amber');
-  if(btn){btn._origText=btn.textContent;btn.textContent='⏳ Generando…';btn.disabled=true;}
-  toast('Generando PDF...','inf');
+  if(btn&&!returnBase64){btn._origText=btn.textContent;btn.textContent='⏳ Generando…';btn.disabled=true;}
+  if(!returnBase64) toast('Generando PDF...','inf');
   setTimeout(()=>{
     try{
       const {jsPDF}=window.jspdf;
@@ -2983,7 +2995,7 @@ function downloadPDF(){
       // Distribución de columnas: 3 grupos × (label + value)
       // [0]: EMPRESA/PLACA/MARCA/CARROCERÍA/CONDUCTOR      lw=18 vw=42 = 60
       // [1]: FECHA/RUTA/N°ASIENTOS/AÑO FAB/INSP.SUP       lw=22 vw=44 = 66
-      // [2]: LUGAR/KILOMETRAJE/N°PASAJEROS/TIPO/INSP.SGS   lw=18 vw=46 = 64
+      // [2]: LUGAR/KILOMETRAJE/N°PASAJEROS/TIPO/INSP.TS-SST   lw=18 vw=46 = 64
       const COL=[{lw:18,vw:42},{lw:22,vw:44},{lw:18,vw:46}];
       const info=[
         ['EMPRESA',       'Transportes Sagitario S.R.L.',
@@ -3329,15 +3341,25 @@ function downloadPDF(){
       doc.text('Transportes Sagitario S.R.L. · Sistema Integrado de Gestión',W/2,pgH-7.5,{align:'center'});
       doc.text(`Generado: ${today()} ${nowTime()}`,W-M,pgH-7.5,{align:'right'});
 
-      doc.save(`CL_${lastCL.placa}_${lastCL.fecha.replace(/\//g,'-')}.pdf`);
-      if(btn){btn.textContent='📄 Descargar PDF';btn.disabled=false;}
-      toast('PDF descargado con firmas ✅','ok');
+      if(returnBase64){
+        // Return base64 for PA upload (don't save locally)
+        const base64 = doc.output('base64');
+        resolve(base64);
+      } else {
+        // Save locally + also resolve with base64
+        doc.save(`CL_${lastCL.placa}_${lastCL.fecha.replace(/\//g,'-')}.pdf`);
+        resolve(doc.output('base64'));
+      }
+      if(btn&&!returnBase64){btn.textContent='📄 Descargar PDF';btn.disabled=false;}
+      if(!returnBase64) toast('PDF descargado con firmas ✅','ok');
     }catch(e){
       console.error('PDF error:',e);
       if(btn){btn.textContent='📄 Descargar PDF';btn.disabled=false;}
       toast('Error al generar PDF: '+e.message,'err');
+      reject(e);
     }
   },200);
+  });
 }
 
 // ═══════════════════════════════════════
@@ -4299,7 +4321,7 @@ function renderConfig(){
     const dataOk = !!CFG.paUrlDATA;
     const paOk  = !!CFG.paUrlCL;
     statusEl.innerHTML=`
-      <div class="dr"><span class="dk">SGS Correlativo actual</span><span class="dv" style="color:var(--amber);font-size:11px" id="cfg-sgs-val">SGS-${String(sgsCounter).padStart(3,'0')}-${new Date().getFullYear()}</span></div>
+      <div class="dr"><span class="dk">TS-SST Correlativo actual</span><span class="dv" style="color:var(--amber);font-size:11px" id="cfg-sgs-val">SGS-${String(sgsCounter).padStart(3,'0')}-${new Date().getFullYear()}</span></div>
       <div class="dr"><span class="dk">Flow Datos SP (lectura)</span><span class="dv" style="font-size:11px;color:${dataOk?'var(--green2)':'var(--red2)'}">${dataOk?'✅ URL activa':'❌ Sin URL — REQUERIDO'}</span></div>
       <div class="dr"><span class="dk">Flow Check List (PA)</span><span class="dv" style="font-size:11px;color:${paOk?'var(--green2)':'var(--red2)'}">${paOk?'✅ URL activa':'❌ Sin URL'}</span></div>
       <div class="dr"><span class="dk">Modo actual</span><span class="dv" style="font-size:11px;color:${CFG.configured?'var(--green2)':'var(--amber)'}">
@@ -4310,7 +4332,7 @@ function renderConfig(){
 
   const prev=document.getElementById('cfg-json-prev');
   if(prev) prev.textContent=JSON.stringify({
-    tipo:'CheckListBus', codigo:'CL-T7W328-20022026', sgNum:'SGS-047-2026',
+    tipo:'CheckListBus', codigo:'CL-T7W328-20022026', sgNum:'TS-SST-047-2026',
     fecha:'20/02/2026', hora:'08:35', placa:'T7W-328',
     marca:'Mercedes Benz / Marcopolo GT O500', tipoUnidad:'Bus',
     ruta:'Cajamarca – Yanacocha',
