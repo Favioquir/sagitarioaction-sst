@@ -2843,10 +2843,15 @@ async function enviarCL(){
     // Generar PDF ANTES de enviar a PA
     let pdfBase64 = '';
     try{
-      pdfBase64 = await downloadPDF(true); // true = return base64, don't save locally
-      console.log('📄 PDF generated, base64 length:', pdfBase64.length);
+      const result = await downloadPDF(true); // true = return base64, don't save locally
+      if(result && typeof result === 'string' && result.length > 0){
+        pdfBase64 = result;
+        console.log('📄 PDF generated, base64 length:', pdfBase64.length);
+      } else {
+        console.warn('📄 PDF generation returned empty result, sending without PDF');
+      }
     }catch(pdfErr){
-      console.warn('PDF generation failed, sending without PDF:', pdfErr);
+      console.warn('📄 PDF generation failed, sending without PDF:', pdfErr);
     }
 
     btnEnviar.textContent='⏳ Enviando a Power Automate...';
@@ -3044,7 +3049,8 @@ function downloadPDF(returnBase64){
       y+=5;
 
       // ── ALERTA FUERA DE SERVICIO (si hay ítems ALTO en NO) ──
-      const noAltoItems=CL.alto.filter(i=>lastCL.clVals&&lastCL.clVals[i.id]==='NO');
+      const _clVals=lastCL.clVals||{}; const _clDates=lastCL.clDates||{}; const _clObs=lastCL.clObs||{};
+      const noAltoItems=CL.alto.filter(i=>_clVals[i.id]==="NO");
       if(noAltoItems.length>0){
         doc.setFillColor(180,0,0);doc.rect(M,y,TW,11,'F');
         doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(10);
@@ -3058,7 +3064,7 @@ function downloadPDF(returnBase64){
         y+=3;
         noAltoItems.forEach(item=>{
           doc.setTextColor(140,0,0);doc.setFont('helvetica','normal');doc.setFontSize(6.5);
-          doc.text('• '+item.t+(lastCL.clObs&&lastCL.clObs[item.id]?' → '+lastCL.clObs[item.id]:''),M+4,y);
+          doc.text('• '+item.t+(_clObs[item.id]?' → '+_clObs[item.id]:''),M+4,y);
           y+=5;
         });
         y+=4;
@@ -3080,7 +3086,7 @@ function downloadPDF(returnBase64){
         doc.setDrawColor(205,205,215);doc.rect(M,y,W-M*2,rh,'S');
         [[CL.alto,0],[CL.inter,1],[CL.bajo,2]].forEach(([col,ci])=>{
           const item=col[r];if(!item)return;
-          const v=lastCL.clVals[item.id]||'';
+          const v=_clVals[item.id]||'';
           const x=M+ci*colW;
           // OK box
           if(v==='OK'){doc.setFillColor(30,130,30);doc.rect(x+1,y+.8,3.5,3,'F');}
@@ -3098,7 +3104,7 @@ function downloadPDF(returnBase64){
           doc.setDrawColor(120,120,120);doc.rect(x+10,y+.8,3.5,3,'S');
           if(v==='N/A'){doc.setTextColor(255,255,255);doc.setFontSize(5);doc.text('N/A',x+10.2,y+3);}
           doc.setTextColor(0,0,0);doc.setFont('helvetica','normal');doc.setFontSize(5.8);
-          const itemDate=lastCL.clDates&&lastCL.clDates[item.id];
+          const itemDate=_clDates[item.id];
           const itemTxt=item.t.slice(0,32)+(itemDate?' ['+itemDate+']':'');
           doc.text(itemTxt,x+14.5,y+3);
         });
@@ -3133,7 +3139,7 @@ function downloadPDF(returnBase64){
         doc.setDrawColor(205,205,215);doc.rect(M,y,W-M*2,rh,'S');
         docGroups.forEach((g,gi)=>{
           const item=g.items[r];if(!item)return;
-          const v=lastCL.clVals[item.id]||'';const x=M+gi*dc;
+          const v=_clVals[item.id]||'';const x=M+gi*dc;
           if(v==='OK'){doc.setFillColor(30,130,30);doc.rect(x+1,y+1,3,3,'F');}
           else{doc.setFillColor(255,255,255);doc.rect(x+1,y+1,3,3,'F');}
           doc.setDrawColor(120,120,120);doc.rect(x+1,y+1,3,3,'S');
@@ -3143,7 +3149,7 @@ function downloadPDF(returnBase64){
           doc.setDrawColor(120,120,120);doc.rect(x+5,y+1,3,3,'S');
           if(v==='NO'){doc.setTextColor(255,255,255);doc.setFontSize(4.5);doc.text('✗',x+5.5,y+3.3);}
           doc.setTextColor(0,0,0);doc.setFont('helvetica','normal');doc.setFontSize(5.5);
-          const dateVal=lastCL.clDates&&lastCL.clDates[item.id];
+          const dateVal=_clDates[item.id];
           const suffix=dateVal&&item.date?' '+dateVal:'';
           doc.text((item.t+suffix).slice(0,36),x+9.5,y+3.5);
         });
@@ -3300,7 +3306,7 @@ function downloadPDF(returnBase64){
 
       // ── REGISTRO COMPLETO DE INSPECCIÓN ──
       const allItemsFlat=[...CL.alto,...CL.inter,...CL.bajo,...CL.docs_vehiculo,...CL.docs_inter,...CL.docs_conductor];
-      const inspectedItems=allItemsFlat.filter(i=>lastCL.clVals[i.id]); // All items that were marked
+      const inspectedItems=allItemsFlat.filter(i=>_clVals[i.id]); // All items that were marked
       if(inspectedItems.length>0){
         if(y>200){doc.addPage();y=12;}
         doc.setFillColor(0,50,130);doc.rect(M,y,TW,7,'F');
@@ -3308,9 +3314,9 @@ function downloadPDF(returnBase64){
         doc.text('REGISTRO COMPLETO DE INSPECCIÓN — Todos los ítems evaluados',W/2,y+4.5,{align:'center'});
         y+=7;
         // Summary bar
-        const totalOK=inspectedItems.filter(i=>lastCL.clVals[i.id]==='OK').length;
-        const totalNO=inspectedItems.filter(i=>lastCL.clVals[i.id]==='NO').length;
-        const totalNA=inspectedItems.filter(i=>lastCL.clVals[i.id]==='N/A').length;
+        const totalOK=inspectedItems.filter(i=>_clVals[i.id]==='OK').length;
+        const totalNO=inspectedItems.filter(i=>_clVals[i.id]==='NO').length;
+        const totalNA=inspectedItems.filter(i=>_clVals[i.id]==='N/A').length;
         doc.setFillColor(240,245,255);doc.rect(M,y,TW,5.5,'F');
         doc.setDrawColor(180,180,200);doc.rect(M,y,TW,5.5,'S');
         doc.setTextColor(30,30,80);doc.setFont('helvetica','bold');doc.setFontSize(6);
@@ -3331,9 +3337,9 @@ function downloadPDF(returnBase64){
         const interIds=new Set(CL.inter.map(i=>i.id));
         const bajoIds=new Set(CL.bajo.map(i=>i.id));
         inspectedItems.forEach((item,idx)=>{
-          const v=lastCL.clVals[item.id]||'—';
-          const obs=(lastCL.clObs&&lastCL.clObs[item.id])||'';
-          const date=(lastCL.clDates&&lastCL.clDates[item.id])||'';
+          const v=_clVals[item.id]||'—';
+          const obs=(_clObs[item.id])||'';
+          const date=(_clDates[item.id])||'';
           const nivel=altoIds.has(item.id)?'ALTO':interIds.has(item.id)?'INTER':bajoIds.has(item.id)?'BAJO':'DOC';
           const rh=5;
           if(y>268){doc.addPage();y=12;}
@@ -3370,7 +3376,7 @@ function downloadPDF(returnBase64){
       }
 
       // ── DETALLE DE HALLAZGOS / ACCIONES CORRECTIVAS ──
-      if(lastCL.allNO&&lastCL.allNO.length>0){
+      if((lastCL.allNO||[]).length>0){
         if(y>200){doc.addPage();y=12;}
         doc.setFillColor(170,0,0);doc.rect(M,y,TW,7,'F');
         doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(7.5);
@@ -3386,7 +3392,7 @@ function downloadPDF(returnBase64){
           doc.text(h,cx+1.5,y+3.8);
         });
         y+=5.5;
-        lastCL.allNO.forEach((h,idx)=>{
+        (lastCL.allNO||[]).forEach((h,idx)=>{
           const rh=6;
           if(y>268){doc.addPage();y=12;}
           doc.setFillColor(idx%2===0?255:252,idx%2===0?255:248,idx%2===0?255:248);
